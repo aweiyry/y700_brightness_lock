@@ -168,6 +168,10 @@ su -c "sh /data/local/tmp/y700_brightness_diag.sh 10"
 
 ### 模块
 
+- **V1.1** — 修复「删除模块重刷后锁定失效」：`service.sh` 原用 `nohup "$MODDIR/brightnessd.sh"` 直接
+  exec 脚本、依赖执行位，而 Windows 打包 zip 会丢失 `.sh` 的 `+x` 权限，导致开机自启时
+  `Permission denied`、守护进程起不来；现改用显式 `sh` 启动 + 防御性 `chmod 755`，zip 打包也改为
+  保留脚本执行权限（三保险）
 - **V1.0** — 首个版本：钉死背光温控冷却设备 `cooling_device34` + 每秒回写背光节点；
   配置 `/data/adb/brightness_lock/target`（数值=锁定档位，`off`=解锁）；开机 `service.sh` 自启守护进程；
   **单实例守护**（重复拉起自动退出）
