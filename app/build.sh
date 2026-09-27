@@ -16,7 +16,7 @@ java -cp "$BT/lib/d8.jar" com.android.tools.r8.D8 --release --lib "$PLAT" --outp
 
 echo "[3/6] aapt2 打包资源..."
 "$BT/aapt2.exe" link -o "$OUT/base.apk" --manifest "$APP/AndroidManifest.xml" -I "$PLAT" \
-  --min-sdk-version 26 --target-sdk-version 35 --version-code 2 --version-name 1.1
+  --min-sdk-version 26 --target-sdk-version 35 --version-code 3 --version-name 1.2
 
 echo "[4/6] 注入 classes.dex..."
 OUT_WIN=$(cygpath -w "$OUT")
