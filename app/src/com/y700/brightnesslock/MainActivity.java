@@ -4,10 +4,12 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Switch;
@@ -21,6 +23,7 @@ import java.io.InputStreamReader;
 public class MainActivity extends Activity {
 
     private static final String TARGET = "/data/adb/brightness_lock/target";
+    private static final int[] PRESETS = {5, 20, 50, 80, 100};
     private static String backlightDir = null;
 
     private TextView levelView;
@@ -55,50 +58,72 @@ public class MainActivity extends Activity {
         levelView.setTypeface(null, Typeface.BOLD);
 
         TextView hint = new TextView(this);
-        hint.setText("亮度档位（每 5% 一档，最高 100%）");
+        hint.setText("亮度（1% 精度，1~100%）");
         hint.setTextColor(Color.parseColor("#9A9AA3"));
         hint.setTextSize(14);
         hint.setGravity(Gravity.CENTER);
 
         bar = new SeekBar(this);
-        bar.setMax(19); // 0..19 => 5%..100%
+        bar.setMax(99); // progress 0..99 => 1%..100%
         bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
-                int lvl = (p + 1) * 5;
-                levelView.setText(lvl + "%");
+                if (fromUser) {
+                    levelView.setText((p + 1) + "%");
+                }
             }
             @Override public void onStartTrackingTouch(SeekBar s) {}
             @Override public void onStopTrackingTouch(SeekBar s) {
-                applyLevel((s.getProgress() + 1) * 5);
+                applyLevel(s.getProgress() + 1);
             }
         });
 
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(52), 1f);
-        Button minus = new Button(this);
-        minus.setText("− 5%");
-        minus.setOnClickListener(new View.OnClickListener() {
+        // 预设常用档位
+        LinearLayout presetRow = new LinearLayout(this);
+        presetRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        pp.leftMargin = dp(3);
+        pp.rightMargin = dp(3);
+        for (int lvl : PRESETS) {
+            presetRow.addView(makePresetButton(lvl), pp);
+        }
+
+        // 自定义档位输入
+        LinearLayout customRow = new LinearLayout(this);
+        customRow.setOrientation(LinearLayout.HORIZONTAL);
+        customRow.setGravity(Gravity.CENTER_VERTICAL);
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setSingleLine(true);
+        input.setHint("自定义 1~100");
+        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(Color.parseColor("#6A6A75"));
+        input.setBackgroundColor(Color.parseColor("#1C1C26"));
+        input.setPadding(dp(14), 0, dp(14), 0);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, dp(48), 2f);
+        ip.rightMargin = dp(8);
+        customRow.addView(input, ip);
+        Button customApply = new Button(this);
+        customApply.setText("应用");
+        customApply.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                int p = bar.getProgress() - 1;
-                if (p < 0) p = 0;
-                bar.setProgress(p);
-                applyLevel((p + 1) * 5);
+                String s = input.getText().toString().trim();
+                if (s.isEmpty()) {
+                    Toast.makeText(MainActivity.this, "请输入 1~100 的数字", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                try {
+                    int lvl = Integer.parseInt(s);
+                    if (lvl < 1 || lvl > 100) {
+                        Toast.makeText(MainActivity.this, "档位需在 1~100 之间", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    setAndApply(lvl);
+                } catch (NumberFormatException e) {
+                    Toast.makeText(MainActivity.this, "请输入有效的整数", Toast.LENGTH_SHORT).show();
+                }
             }
         });
-        Button plus = new Button(this);
-        plus.setText("＋ 5%");
-        plus.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                int p = bar.getProgress() + 1;
-                if (p > bar.getMax()) p = bar.getMax();
-                bar.setProgress(p);
-                applyLevel((p + 1) * 5);
-            }
-        });
-        row.addView(minus, bp);
-        row.addView(plus, bp);
+        customRow.addView(customApply, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
         lockSwitch = new Switch(this);
         lockSwitch.setText("锁定亮度（防高负荷/温控降亮度）");
@@ -108,7 +133,7 @@ public class MainActivity extends Activity {
             @Override public void onCheckedChanged(CompoundButton b, boolean checked) {
                 if (applying) return;
                 if (checked) {
-                    applyLevel((bar.getProgress() + 1) * 5);
+                    applyLevel(bar.getProgress() + 1);
                 } else {
                     unlock();
                 }
@@ -125,12 +150,33 @@ public class MainActivity extends Activity {
         root.addView(levelView);
         root.addView(hint);
         root.addView(bar);
-        root.addView(row);
+        root.addView(presetRow);
+        root.addView(customRow);
         root.addView(lockSwitch);
         root.addView(statusView);
 
         setContentView(root);
         refreshState();
+    }
+
+    private Button makePresetButton(final int lvl) {
+        Button b = new Button(this);
+        b.setText(lvl + "%");
+        b.setAllCaps(false);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                setAndApply(lvl);
+            }
+        });
+        return b;
+    }
+
+    /** 设置档位到进度条/显示并立即应用（不依赖用户是否拖过进度条） */
+    private void setAndApply(int lvl) {
+        lvl = clamp(lvl, 1, 100);
+        bar.setProgress(lvl - 1);
+        levelView.setText(lvl + "%");
+        applyLevel(lvl);
     }
 
     private void applyLevel(final int level) {
@@ -164,24 +210,38 @@ public class MainActivity extends Activity {
     private void refreshState() {
         new Thread(new Runnable() {
             @Override public void run() {
-                int[] bl = readBacklightRoot();
-                final int percent = (int) Math.round(bl[1] * 100.0 / bl[0]);
                 final String target = runRoot("cat " + TARGET);
                 final boolean locked = target != null && target.trim().matches("\\d+");
+                final int percent;
+                if (locked) {
+                    // 锁定态：背光是 App/守护进程直写的，以背光 raw 为准
+                    int[] bl = readBacklightRoot();
+                    percent = clamp((int) Math.round(bl[1] * 100.0 / bl[0]), 1, 100);
+                } else {
+                    // 解锁态：以系统亮度为准（用户看到的系统档位），严格匹配
+                    percent = readSystemBrightnessPercent();
+                }
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
-                        int snap = snapLevel(percent);
                         applying = true;
-                        bar.setProgress(snap / 5 - 1);
+                        bar.setProgress(percent - 1);
                         lockSwitch.setChecked(locked);
                         applying = false;
-                        levelView.setText(snap + "%");
-                        statusView.setText("背光 " + percent + "%  |  节点 " + backlightDir
+                        levelView.setText(percent + "%");
+                        statusView.setText("亮度 " + percent + "%  |  " + (locked ? "已锁定" : "未锁定")
                                 + "  |  Root " + (haveRoot() ? "OK" : "缺失"));
                     }
                 });
             }
         }).start();
+    }
+
+    /** 读取系统亮度百分比（0~255 -> 0~100%），解锁态下与系统滑块严格一致 */
+    private int readSystemBrightnessPercent() {
+        String sb = runRoot("settings get system screen_brightness");
+        int v = parseIntSafe(sb, 0);
+        if (v <= 0) return 1;
+        return clamp((int) Math.round(v * 100.0 / 255.0), 1, 100);
     }
 
     private String buildSetCommand(int level) {
@@ -227,6 +287,12 @@ public class MainActivity extends Activity {
         }
     }
 
+    private static int clamp(int v, int lo, int hi) {
+        if (v < lo) return lo;
+        if (v > hi) return hi;
+        return v;
+    }
+
     private static boolean haveRoot() {
         return new File("/system/bin/su").canExecute()
                 || new File("/system/xbin/su").canExecute()
@@ -249,12 +315,6 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {}
         }
         return null;
-    }
-
-    private static int snapLevel(int percent) {
-        if (percent < 5) percent = 5;
-        if (percent > 100) percent = 100;
-        return ((percent + 2) / 5) * 5;
     }
 
     private int dp(int v) {
