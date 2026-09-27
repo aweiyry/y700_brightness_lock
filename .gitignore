@@ -1,0 +1,13 @@
+# 编译产物
+app/out/
+app/classes/
+
+# 签名密钥（切勿提交！）
+app/debug.keystore
+
+# 打包的模块 zip（通过 Release 发布，不进仓库）
+*.zip
+
+# 系统文件
+.DS_Store
+Thumbs.db
